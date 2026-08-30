@@ -1,0 +1,7 @@
+node_modules/
+
+# Authentication and run state belong outside the repository. These entries
+# are defense in depth if someone overrides the default paths.
+playwright-profile/
+state/
+*.log
