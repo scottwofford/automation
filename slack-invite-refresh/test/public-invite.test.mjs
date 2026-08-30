@@ -39,15 +39,25 @@ test('candidate must extend expiry and last between 20 and 31 days', () => {
   const now = new Date('2026-08-29T12:00:00Z');
   const current = { expiresAt: new Date('2026-09-01T12:00:00Z') };
   const candidate = {
-    url: 'https://join.slack.com/t/seattleaisafety/shared_invite/zt-safe_token',
+    url: 'https://join.slack.com/t/seattleaisafety/shared_invite/zt-123456789-Abcdefghijklmnopqrstuv',
     expiresAt: new Date('2026-09-28T12:00:00Z'),
   };
   assert.doesNotThrow(() => assertSafeCandidate(candidate, current, now));
 });
 
-test('renewal is due three days before expiry', () => {
+test('accepts a legacy Slack invite token with a tilde', () => {
+  const now = new Date('2026-08-29T12:00:00Z');
+  const current = { expiresAt: new Date('2026-09-01T12:00:00Z') };
+  const candidate = {
+    url: 'https://join.slack.com/t/seattleaisafety/shared_invite/zt-3rhoypy01-~KujjmpkESfRykseyMZyCg2',
+    expiresAt: new Date('2026-09-28T12:00:00Z'),
+  };
+  assert.doesNotThrow(() => assertSafeCandidate(candidate, current, now));
+});
+
+test('renewal is due one minute after expiry', () => {
   assert.equal(
     renewalDueAt(new Date('2026-09-28T23:14:56Z')).toISOString(),
-    '2026-09-25T23:14:56.000Z',
+    '2026-09-28T23:15:56.000Z',
   );
 });

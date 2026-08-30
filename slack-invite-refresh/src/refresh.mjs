@@ -3,6 +3,8 @@ import { publishCandidate } from './github-update.mjs';
 import {
   assertSafeCandidate,
   inspectInvite,
+  readProductionConfig,
+  renewalDueAt,
   validateProductionInvite,
 } from './public-invite.mjs';
 import {
@@ -15,7 +17,7 @@ import {
 export async function refresh() {
   const release = await acquireLock();
   try {
-    const current = await validateProductionInvite();
+    const current = await readProductionConfig();
     const state = await readState();
     let candidate;
 
@@ -30,8 +32,26 @@ export async function refresh() {
         return candidate;
       }
     } else {
-      const browserResult = await createOrExtendInvite(current);
-      candidate = await inspectInvite(browserResult.url);
+      try {
+        const live = await inspectInvite(current.url);
+        if (live.expiresAt.getTime() > current.expiresAt.getTime()) {
+          candidate = live;
+        } else if (new Date() < renewalDueAt(current.expiresAt)) {
+          throw new Error('RENEWAL_NOT_DUE');
+        } else {
+          throw new Error('CURRENT_INVITE_STILL_ACTIVE');
+        }
+      } catch (error) {
+        if (
+          !['WRONG_SLACK_WORKSPACE', 'SLACK_INVITE_INACTIVE'].includes(
+            error.message,
+          )
+        ) {
+          throw error;
+        }
+        const browserResult = await createOrExtendInvite(current);
+        candidate = await inspectInvite(browserResult.url);
+      }
       assertSafeCandidate(candidate, current);
 
       await writeState({

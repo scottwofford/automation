@@ -4,7 +4,7 @@ import { desiredConfig, localDate } from '../src/github-update.mjs';
 
 test('formats the site configuration exactly', () => {
   const candidate = {
-    url: 'https://join.slack.com/t/seattleaisafety/shared_invite/zt-safe_token',
+    url: 'https://join.slack.com/t/seattleaisafety/shared_invite/zt-123456789-Abcdefghijklmnopqrstuv',
     expiresAt: new Date('2026-09-28T23:14:56Z'),
   };
   assert.deepEqual(

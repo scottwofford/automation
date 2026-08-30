@@ -62,6 +62,14 @@ export async function observeInviteControls() {
     throw new Error('UNEXPECTED_SLACK_REDIRECT');
   }
 
+  const inviteLinksTab = page.getByRole('tab', { name: 'Invite Links' });
+  if ((await inviteLinksTab.count()) !== 1) {
+    await context.close();
+    throw new Error('INVITE_LINKS_TAB_NOT_UNIQUE');
+  }
+  await inviteLinksTab.click();
+  await page.waitForTimeout(2_000);
+
   const controls = await page
     .locator('button, a, [role="tab"]')
     .evaluateAll((elements) =>
@@ -80,13 +88,92 @@ export async function observeInviteControls() {
         .slice(0, 50),
     );
 
-  process.stdout.write(`${JSON.stringify({ url: page.url(), controls }, null, 2)}\n`);
+  const rows = await page
+    .locator('tr, [role="row"]')
+    .evaluateAll((elements) =>
+      elements
+        .map((element, index) => ({
+          index,
+          text: (element.textContent || '')
+            .replace(/https:\/\/join\.slack\.com\/\S+/gi, '[invite link]')
+            .replace(/zt-[a-z0-9]{9}-~?[A-Za-z0-9_]{22}/g, '[invite token]')
+            .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
+            .replace(/\s+/g, ' ')
+            .trim(),
+        }))
+        .filter(
+          ({ text }) =>
+            text.length <= 500 &&
+            /(renew|deactivate|feb|expired|active|created)/i.test(text),
+        )
+        .slice(0, 50),
+    );
+
+  process.stdout.write(
+    `${JSON.stringify({ url: page.url(), controls, rows }, null, 2)}\n`,
+  );
   await context.close();
 }
 
-export async function createOrExtendInvite() {
-  // Deliberately fail closed until the authenticated Slack interface has been
-  // observed and the safe pre-expiry operation is proven. The implementation
-  // must never deactivate the current public link.
-  throw new Error('SLACK_UI_NOT_CALIBRATED');
+async function openInviteLinks(context) {
+  const page = await openAdminPage(context);
+  await page.waitForTimeout(4_000);
+  if (!allowedSlackLocation(page.url())) {
+    throw new Error('UNEXPECTED_SLACK_REDIRECT');
+  }
+
+  const tab = page.getByRole('tab', { name: 'Invite Links' });
+  if ((await tab.count()) !== 1) {
+    throw new Error('INVITE_LINKS_TAB_NOT_UNIQUE');
+  }
+  await tab.click();
+  await page.waitForTimeout(2_000);
+  return page;
+}
+
+export async function createOrExtendInvite(current) {
+  const context = await launchProfile();
+  try {
+    const page = await openInviteLinks(context);
+    const token = current.url.split('/').at(-1);
+    const matchingRows = page
+      .locator('tr, [role="row"]')
+      .filter({ hasText: token })
+      .filter({ has: page.getByRole('button', { name: 'Renew', exact: true }) });
+    if ((await matchingRows.count()) !== 1) {
+      throw new Error('CURRENT_INVITE_RENEW_TARGET_NOT_UNIQUE');
+    }
+
+    const row = matchingRows.first();
+    const rowText = (await row.textContent()) || '';
+    if (/Deactivate/i.test(rowText) || !/Expired on/i.test(rowText)) {
+      throw new Error('CURRENT_INVITE_NOT_EXPIRED');
+    }
+
+    await row.getByRole('button', { name: 'Renew', exact: true }).click();
+    await page.waitForTimeout(500);
+
+    const dialog = page.getByRole('dialog');
+    if ((await dialog.count()) === 1 && (await dialog.isVisible())) {
+      const confirm = dialog.getByRole('button', {
+        name: 'Renew',
+        exact: true,
+      });
+      if ((await confirm.count()) !== 1) {
+        throw new Error('RENEW_CONFIRMATION_AMBIGUOUS');
+      }
+      await confirm.click();
+    }
+
+    const renewedRow = page
+      .locator('tr, [role="row"]')
+      .filter({ hasText: token });
+    await renewedRow.getByText('Deactivate', { exact: true }).waitFor({
+      state: 'visible',
+      timeout: 15_000,
+    });
+    return { url: current.url };
+  } finally {
+    await context.close();
+  }
 }

@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { launchAgentPlist, millisecondsUntilDue } from '../src/scheduler.mjs';
 
-test('scheduler waits until three days before expiry', () => {
-  const now = new Date('2026-08-29T23:14:56Z');
+test('scheduler waits until one minute after expiry', () => {
+  const now = new Date('2026-09-28T23:14:56Z');
   const expiry = new Date('2026-09-28T23:14:56Z');
-  assert.equal(millisecondsUntilDue(expiry, now), 27 * 86_400_000);
+  assert.equal(millisecondsUntilDue(expiry, now), 60_000);
 });
 
 test('launch agent stays alive without a daily interval', () => {

@@ -3,7 +3,7 @@ import {
   maximumCandidateDays,
   minimumCandidateDays,
   publicConfigUrl,
-  renewBeforeDays,
+  renewAfterMilliseconds,
   workspaceName,
 } from './config.mjs';
 
@@ -15,7 +15,7 @@ export function assertInviteUrl(url) {
   }
 
   const suffix = url.slice(invitePrefix.length);
-  if (!/^zt-[A-Za-z0-9_-]+$/.test(suffix)) {
+  if (!/^zt-[a-z0-9]{9}-~?[A-Za-z0-9_]{22}$/.test(suffix)) {
     throw new Error('INVALID_SLACK_INVITE_TOKEN');
   }
 }
@@ -107,5 +107,5 @@ export function assertSafeCandidate(candidate, current, now = new Date()) {
 }
 
 export function renewalDueAt(expiresAt) {
-  return new Date(expiresAt.getTime() - renewBeforeDays * millisecondsPerDay);
+  return new Date(expiresAt.getTime() + renewAfterMilliseconds);
 }

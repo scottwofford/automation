@@ -1,9 +1,10 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import {
   githubConfigPath,
-  githubKeychainAccount,
-  githubKeychainService,
   githubOwner,
   githubRepository,
   publicConfigUrl,
@@ -34,32 +35,27 @@ function run(command, args, options = {}) {
   });
 }
 
-export async function configureGitHubToken() {
-  process.stdout.write(
-    'Paste a fine-grained token limited to LuthienResearch/luthien-pbc-site with Contents and Pull requests read/write and Checks read, then press Return.\n',
-  );
-  await run('/usr/bin/security', [
-    'add-generic-password',
-    '-U',
-    '-s',
-    githubKeychainService,
-    '-a',
-    githubKeychainAccount,
-    '-w',
-  ], { errorCode: 'GITHUB_TOKEN_NOT_STORED' });
-}
-
 export async function readGitHubToken() {
+  const candidates = [
+    path.join(os.homedir(), 'bin', 'gh'),
+    '/opt/homebrew/bin/gh',
+    '/usr/local/bin/gh',
+  ];
+  let ghPath;
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate);
+      ghPath = candidate;
+      break;
+    } catch {
+      // Try the next standard installation path.
+    }
+  }
+  if (!ghPath) throw new Error('GITHUB_CLI_MISSING');
+
   return run(
-    '/usr/bin/security',
-    [
-      'find-generic-password',
-      '-w',
-      '-s',
-      githubKeychainService,
-      '-a',
-      githubKeychainAccount,
-    ],
+    ghPath,
+    ['auth', 'token'],
     { capture: true, errorCode: 'GITHUB_TOKEN_MISSING' },
   );
 }

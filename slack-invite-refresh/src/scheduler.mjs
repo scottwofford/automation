@@ -4,10 +4,9 @@ import { spawn } from 'node:child_process';
 import {
   launchAgentFile,
   launchAgentLabel,
-  calibrationFile,
   profileDirectory,
 } from './config.mjs';
-import { renewalDueAt, validateProductionInvite } from './public-invite.mjs';
+import { readProductionConfig, renewalDueAt } from './public-invite.mjs';
 import { notify, preparePrivateDirectory, recordEvent, repositoryRoot } from './runtime.mjs';
 
 const maximumSleepMilliseconds = 2_000_000_000;
@@ -26,7 +25,7 @@ export async function schedulerLoop(runRefresh) {
   let consecutiveFailures = 0;
   for (;;) {
     try {
-      const current = await validateProductionInvite();
+      const current = await readProductionConfig();
       let remaining = millisecondsUntilDue(current.expiresAt);
 
       while (remaining > 0) {
@@ -106,12 +105,6 @@ export async function installLaunchAgent() {
   } catch {
     throw new Error('LOGIN_PROFILE_MISSING');
   }
-  try {
-    await fs.access(calibrationFile);
-  } catch {
-    throw new Error('SLACK_UI_NOT_CALIBRATED');
-  }
-
   const cliPath = `${repositoryRoot()}/src/cli.mjs`;
   await fs.mkdir(path.dirname(launchAgentFile), { recursive: true });
   await fs.writeFile(
