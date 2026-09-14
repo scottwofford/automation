@@ -1,0 +1,6 @@
+{
+  "display_information": {"name": "Seattle AI Safety Intake", "description": "Optional private newcomer introductions for Scott", "background_color": "#173a44"},
+  "features": {"bot_user": {"display_name": "Seattle AI Safety Intake", "always_online": false}, "app_home": {"messages_tab_enabled": true, "messages_tab_read_only_enabled": false}},
+  "oauth_config": {"scopes": {"bot": ["users:read", "chat:write", "im:write", "im:history"]}},
+  "settings": {"socket_mode_enabled": true, "event_subscriptions": {"bot_events": ["team_join", "message.im"]}, "org_deploy_enabled": false, "token_rotation_enabled": false}
+}
