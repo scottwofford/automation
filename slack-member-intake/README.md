@@ -4,6 +4,12 @@ Prepared and locally tested (12 passing tests); not installed in Slack or runnin
 
 The bot uses Slack Socket Mode on an existing machine, so it needs no public web server. A Mac pilot avoids another hosting service but misses events when the machine sleeps or the process stops; it is not reliable always-on intake. Choose an existing always-on host before relying on it for every new joiner. No historical membership scan or welcome-message backfill runs.
 
+## Native Slack alternative
+
+Slack's [welcome and form workflow template](https://slack.com/help/articles/31449260577043-Build-a-workflow--Use-a-workflow-template) can send a private welcome and form when someone joins a channel, then send responses to a customizable conversation. Using #general as the trigger could avoid an always-on host. [Workflow Builder requires a paid plan](https://slack.com/help/articles/17542172840595-Build-a-workflow--Create-a-workflow-in-Slack); Seattle's plan, available controls, and a private response destination still need verification in the Slack interface. Channel arrivals differ from workspace joins, so guest and duplicate handling must also be checked.
+
+The form wording and private response destination require separate review before publishing a workflow. The custom bot's reply DELETE behavior does not transfer to a native workflow; do not reuse that promise in the form. Neither a native workflow nor this bot has been enabled.
+
 ## Proposed message
 
 Recipient: each future full human member joining Seattle AI Safety after activation, once only. Guests and external Slack Connect users are excluded. Channel: a private direct message from the Seattle AI Safety Intake app.
