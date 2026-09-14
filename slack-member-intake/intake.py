@@ -1,4 +1,5 @@
 """Seattle AI Safety newcomer intake. Local draft mode is the default."""
+from decimal import Decimal, InvalidOperation
 import hashlib
 import os
 from pathlib import Path
@@ -21,12 +22,19 @@ class Intake:
         self.send = send
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(path.parent, 0o700)
         self.db = sqlite3.connect(path, check_same_thread=False)
+        self.db.execute("PRAGMA secure_delete = ON")
         os.chmod(path, 0o600)
         self.db.executescript("""
             CREATE TABLE IF NOT EXISTS newcomers (
                 team_id TEXT, user_id TEXT, event_id TEXT, observed_at INTEGER,
                 state TEXT, channel_id TEXT, PRIMARY KEY(team_id, user_id));
+            CREATE TABLE IF NOT EXISTS message_versions (
+                team_id TEXT, channel_id TEXT, message_ts TEXT, version_ts TEXT, deleted INTEGER,
+                PRIMARY KEY(team_id, channel_id, message_ts));
+            CREATE TABLE IF NOT EXISTS deletion_cutoffs (
+                team_id TEXT, user_id TEXT, cutoff_ts TEXT, PRIMARY KEY(team_id, user_id));
             CREATE TABLE IF NOT EXISTS replies (
                 team_id TEXT, user_id TEXT, channel_id TEXT, message_ts TEXT,
                 text TEXT, observed_at INTEGER,
@@ -73,28 +81,67 @@ class Intake:
             return 'ignored'
         channel = event.get('channel')
         subtype = event.get('subtype')
-        if subtype == 'message_deleted':
-            with self.db:
-                self.db.execute('DELETE FROM replies WHERE team_id=? AND channel_id=? AND message_ts=?',
-                                (self.team_id, channel, event.get('deleted_ts')))
-            return 'deleted'
+        # Use Slack's source timestamps, not delivery order. Replayed events
+        # must never restore deleted text or replace a newer version.
         message = event.get('message', {}) if subtype == 'message_changed' else event
+        message_ts = event.get('deleted_ts') if subtype == 'message_deleted' else message.get('ts')
+        version_ts = (message.get('edited', {}).get('ts')
+                      or ((event.get('event_ts') or body.get('event_time')) if subtype else message_ts))
+        try:
+            created, version = Decimal(str(message_ts)), Decimal(str(version_ts))
+            if not created.is_finite() or not version.is_finite():
+                return 'ignored'
+        except InvalidOperation:
+            return 'ignored'
+        key = (self.team_id, channel, message_ts)
+        previous = self.db.execute(
+            'SELECT version_ts, deleted FROM message_versions WHERE team_id=? AND channel_id=? AND message_ts=?', key).fetchone()
+        if previous and (previous[1] or Decimal(previous[0]) > version
+                         or (Decimal(previous[0]) == version and subtype != 'message_deleted')):
+            return 'ignored'
+        if subtype == 'message_deleted':
+            known = self.db.execute('SELECT 1 FROM newcomers WHERE team_id=? AND channel_id=? AND state=?',
+                                    (self.team_id, channel, 'sent')).fetchone()
+            if not known:
+                return 'ignored'
+            with self.db:
+                self.db.execute('DELETE FROM replies WHERE team_id=? AND channel_id=? AND message_ts=?', key)
+                self.db.execute('INSERT OR REPLACE INTO message_versions VALUES (?, ?, ?, ?, 1)', (*key, str(version)))
+            return 'deleted'
         if subtype not in (None, 'message_changed') or message.get('bot_id'):
             return 'ignored'
         user = message.get('user')
         known = self.db.execute('SELECT 1 FROM newcomers WHERE team_id=? AND user_id=? AND channel_id=? AND state=?',
                                (self.team_id, user, channel, 'sent')).fetchone()
-        if not known or not message.get('ts') or not isinstance(message.get('text'), str):
+        if not known or not isinstance(message.get('text'), str):
             return 'ignored'
+        cutoff_row = self.db.execute('SELECT cutoff_ts FROM deletion_cutoffs WHERE team_id=? AND user_id=?',
+                                     (self.team_id, user)).fetchone()
+        cutoff = Decimal(cutoff_row[0]) if cutoff_row else Decimal('-Infinity')
         with self.db:
             if message['text'].strip().upper() == 'DELETE':
-                self.db.execute('DELETE FROM replies WHERE team_id=? AND user_id=?', (self.team_id, user))
+                cutoff = max(cutoff, version)
+                self.db.execute('INSERT OR REPLACE INTO deletion_cutoffs VALUES (?, ?, ?)',
+                                (self.team_id, user, str(cutoff)))
+                # Keep later, genuinely new replies even if the DELETE event
+                # arrives late. Only IDs and timestamps survive deletion.
+                rows = self.db.execute('SELECT channel_id, message_ts FROM replies WHERE team_id=? AND user_id=?',
+                                       (self.team_id, user)).fetchall()
+                for saved_channel, saved_ts in rows:
+                    if Decimal(saved_ts) <= cutoff:
+                        self.db.execute('DELETE FROM replies WHERE team_id=? AND channel_id=? AND message_ts=?',
+                                        (self.team_id, saved_channel, saved_ts))
+                self.db.execute('INSERT OR REPLACE INTO message_versions VALUES (?, ?, ?, ?, 1)', (*key, str(version)))
                 return 'deleted'
+            if created <= cutoff:
+                return 'ignored'
+            self.db.execute('INSERT OR REPLACE INTO message_versions VALUES (?, ?, ?, ?, 0)', (*key, str(version)))
             # Keep one current version per Slack message, including edits. Never
             # publish these private replies to Git or a shared directory.
             self.db.execute('INSERT OR REPLACE INTO replies VALUES (?, ?, ?, ?, ?, ?)',
-                            (self.team_id, user, channel, message['ts'], message['text'], body.get('event_time', 0)))
+                            (self.team_id, user, channel, message_ts, message['text'], body.get('event_time', 0)))
         return 'saved'
+
 
 
 def main():

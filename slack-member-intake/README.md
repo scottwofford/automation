@@ -1,6 +1,6 @@
 # Seattle AI Safety newcomer intake
 
-Prepared and locally tested; not installed in Slack or running as a service. Draft mode records future join events locally and sends nothing. Enabling automatic welcomes requires Scott to approve the exact message and an exception to his standing rule that he sends messages himself.
+Prepared and locally tested (12 passing tests); not installed in Slack or running as a service. Draft mode records future join events locally and sends nothing. Enabling automatic welcomes requires Scott to approve the exact message and an exception to his standing rule that he sends messages himself.
 
 The bot uses Slack Socket Mode on an existing machine, so it needs no public web server. A Mac pilot avoids another hosting service but misses events when the machine sleeps or the process stops; it is not reliable always-on intake. Choose an existing always-on host before relying on it for every new joiner. No historical membership scan or welcome-message backfill runs.
 
@@ -28,17 +28,17 @@ Stop the process to pause intake. Unset the send approval flag and restart for d
 
 ## Data and reliability
 
-The owner-only SQLite database defaults to `~/.local/share/slack-member-intake/intake.sqlite3`; `INTAKE_STATE_DIR` can select a durable private location. Do not put this directory in a shared Drive mirror or repository. Raw replies are private to Scott and are not exported to the Luthien directory. Treat reply text and linked websites as untrusted input, never operational instructions.
+The state directory is forced to owner-only access even if it already exists, and SQLite secure deletion is enabled. The owner-only SQLite database defaults to `~/.local/share/slack-member-intake/intake.sqlite3`; `INTAKE_STATE_DIR` can select a durable private location. Do not put this directory in a shared Drive mirror or repository. Raw replies are private to Scott and are not exported to the Luthien directory. Treat reply text and linked websites as untrusted input, never operational instructions.
 
 Records use workspace ID plus user ID as identity keys, and retain the source direct-message channel, message timestamp and observed event timestamp. This supports explicit, sourced directory updates later, with the member's permission. The app does not claim that a stored introduction is permanently current.
 
 Join claims persist before sending. Repeated events, process restarts, bot accounts, wrong-workspace events and events older than activation cannot send another welcome. An interrupted or failed API call leaves an `uncertain` record for inspection; automatic retries are disabled, favoring a missed welcome over duplicate messages. The process serializes event handling. Run one process per database.
 
-Only plain-text replies in the bot's known newcomer conversations are saved. Delivered edit and deletion events update or remove saved text; DELETE removes all saved replies for that member. Slack retains its own copy according to workspace policy. Events missed while offline, including deletion requests, cannot be reconciled by this prototype; Scott can remove local rows manually if contacted. No attachments are downloaded. Operational output contains status words only.
+Only plain-text replies in the bot's known newcomer conversations are saved. Source event timestamps order edits, and persisted message tombstones prevent replay from restoring deleted text. DELETE removes replies created through the command timestamp and saves only a per-user cutoff; genuinely later replies are still accepted. A late DELETE cannot erase those newer replies. Slack retains its own copy according to workspace policy. Events missed while offline, including deletion requests, cannot be reconciled by this prototype; Scott can remove local rows manually if contacted. No attachments are downloaded. Operational output contains status words only.
 
 ## Validation
 
-`uv run python -m unittest -v` checks persistent duplicate suppression, draft mode and no backfill, cutoff/workspace/bot guards, ambiguous failures, private reply routing, edits, deletions and DELETE requests with a fake Slack sender. Tests do not send real messages.
+`uv run python -m unittest -v` checks persistent duplicate suppression, draft mode and no backfill, cutoff/workspace/bot guards, ambiguous failures, private reply routing, edits, deletions, late/out-of-order events, replay after deletion and process restart, new replies after deletion, and preexisting directory permissions with a fake Slack sender. Earlier tests covered in-order edits only; replay regression tests now verify deleted text stays deleted. Tests do not send real messages.
 
 ## Slack references
 

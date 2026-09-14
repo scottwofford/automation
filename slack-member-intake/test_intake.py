@@ -74,10 +74,10 @@ class IntakeTest(unittest.TestCase):
         self.bot.join(self.join())
         self.assertEqual(self.bot.reply(self.reply(channel='D2')), 'ignored')
         self.assertEqual(self.bot.reply(self.reply()), 'saved')
-        self.bot.reply(self.reply(subtype='message_changed', message={
+        self.bot.reply(self.reply(subtype='message_changed', event_ts='106.0', message={
             'user': 'U1', 'ts': '105.1', 'text': 'Updated introduction'}))
         self.assertEqual(self.bot.db.execute('SELECT text FROM replies').fetchall(), [('Updated introduction',)])
-        self.bot.reply(self.reply(subtype='message_deleted', deleted_ts='105.1'))
+        self.bot.reply(self.reply(subtype='message_deleted', event_ts='107.0', deleted_ts='105.1'))
         self.assertEqual(self.bot.db.execute('SELECT count(*) FROM replies').fetchone()[0], 0)
 
     def test_delete_command_removes_saved_replies(self):
@@ -85,6 +85,48 @@ class IntakeTest(unittest.TestCase):
         self.bot.reply(self.reply())
         self.assertEqual(self.bot.reply(self.reply(ts='106.1', text='DELETE')), 'deleted')
         self.assertEqual(self.bot.db.execute('SELECT count(*) FROM replies').fetchone()[0], 0)
+
+    def test_delete_cutoff_survives_restart_and_allows_new_replies(self):
+        self.bot.join(self.join())
+        self.bot.reply(self.reply())
+        self.bot.reply(self.reply(ts='106.1', text='DELETE'))
+        self.bot.db.close()
+        self.bot = Intake(self.path, 'T1', 100, self.send)
+        self.assertEqual(self.bot.reply(self.reply()), 'ignored')
+        self.assertEqual(self.bot.reply(self.reply(subtype='message_changed', event_ts='108.0',
+            message={'user': 'U1', 'ts': '105.1', 'text': 'Old message edited later'})), 'ignored')
+        self.assertEqual(self.bot.reply(self.reply(ts='109.1', text='New introduction')), 'saved')
+        self.assertEqual(self.bot.db.execute('SELECT text FROM replies').fetchall(), [('New introduction',)])
+
+    def test_old_edit_cannot_replace_newer_edit(self):
+        self.bot.join(self.join())
+        for edited, text in [('108.000002', 'Newer'), ('108.000001', 'Older')]:
+            self.bot.reply(self.reply(subtype='message_changed', event_ts=edited, message={
+                'user': 'U1', 'ts': '105.1', 'text': text, 'edited': {'ts': edited}}))
+        self.assertEqual(self.bot.db.execute('SELECT text FROM replies').fetchall(), [('Newer',)])
+
+    def test_deleted_message_tombstone_blocks_replayed_original_and_edit(self):
+        self.bot.join(self.join())
+        self.bot.reply(self.reply(subtype='message_deleted', event_ts='110.0', deleted_ts='105.1'))
+        self.bot.db.close()
+        self.bot = Intake(self.path, 'T1', 100, self.send)
+        self.assertEqual(self.bot.reply(self.reply()), 'ignored')
+        self.assertEqual(self.bot.reply(self.reply(subtype='message_changed', event_ts='109.0',
+            message={'user': 'U1', 'ts': '105.1', 'text': 'Replay'})), 'ignored')
+        self.assertEqual(self.bot.db.execute('SELECT count(*) FROM replies').fetchone()[0], 0)
+
+    def test_late_delete_does_not_remove_newer_reply(self):
+        self.bot.join(self.join())
+        self.bot.reply(self.reply(ts='109.1', text='Newer reply'))
+        self.bot.reply(self.reply(ts='106.1', text='DELETE'))
+        self.assertEqual(self.bot.db.execute('SELECT text FROM replies').fetchall(), [('Newer reply',)])
+
+    def test_preexisting_state_directory_becomes_private(self):
+        self.path.parent.chmod(0o755)
+        self.bot.db.close()
+        self.bot = Intake(self.path, 'T1', 100)
+        self.assertEqual(self.path.parent.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
 
 
 if __name__ == '__main__':
