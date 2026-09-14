@@ -51,6 +51,15 @@ class IntakeTest(unittest.TestCase):
         self.assertEqual(self.bot.join(self.join()), 'duplicate')
         self.assertEqual(self.calls, [])
 
+    def test_external_users_guests_and_channel_arrivals_do_not_send(self):
+        for fields in [{'team_id': 'T2'}, {'is_stranger': True},
+                       {'is_restricted': True}, {'is_ultra_restricted': True}]:
+            self.assertEqual(self.bot.join(self.join(event={
+                'type': 'team_join', 'user': {'id': 'U1', **fields}})), 'ignored')
+        self.assertEqual(self.bot.join(self.join(event={
+            'type': 'member_joined_channel', 'user': {'id': 'U1'}})), 'ignored')
+        self.assertEqual(self.calls, [])
+
     def test_ambiguous_failure_is_not_retried(self):
         def fail(user, text):
             self.calls.append(user)

@@ -40,6 +40,9 @@ class Intake:
         if (body.get('team_id') != self.team_id or event.get('type') != 'team_join'
                 or not body.get('event_id') or not user.get('id')
                 or observed < self.activated_at or user.get('is_bot')
+                or user.get('team_id', self.team_id) != self.team_id
+                or user.get('is_stranger') or user.get('is_restricted')
+                or user.get('is_ultra_restricted')
                 or user.get('deleted') or user.get('id') == 'USLACKBOT'):
             return 'ignored'
         # Persist the claim BEFORE contacting Slack. A crash or timeout must not

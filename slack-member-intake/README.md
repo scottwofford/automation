@@ -6,7 +6,7 @@ The bot uses Slack Socket Mode on an existing machine, so it needs no public web
 
 ## Proposed message
 
-Recipient: each future human member joining Seattle AI Safety after activation, once only. Channel: a private direct message from the Seattle AI Safety Intake app.
+Recipient: each future full human member joining Seattle AI Safety after activation, once only. Guests and external Slack Connect users are excluded. Channel: a private direct message from the Seattle AI Safety Intake app.
 
 > Welcome to Seattle AI Safety! I'm Scott's intake bot. If you'd like, reply with:
 > • What you're working on and your AI safety interests
