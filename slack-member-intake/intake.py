@@ -6,12 +6,11 @@ from pathlib import Path
 import sqlite3
 from threading import RLock
 
-WELCOME = """Welcome to Seattle AI Safety! I'm Scott's intake bot. If you'd like, reply with:
-• What you're working on and your AI safety interests
-• A public professional profile or website
-• Help you're looking for or could offer
+WELCOME = """Welcome to Seattle AI Safety. There are apparently several of us. I’m a bot helping <https://scottwofford.com/|Scott> and <https://www.jai.one/|Jai> welcome new members.
 
-All questions are optional. Scott can read your replies; they won't be added to a shared directory without your permission. Please don't include sensitive personal information. Reply DELETE to ask the bot to remove its saved replies, or contact Scott directly. No response needed if you'd rather skip this."""
+Please post something in <#C0C1Y2U8QTE> such as something you've done, made or are working on plus your favorite AI or AI safety meme.
+
+Also, if you know anyone else based in Seattle who’s AI safety-pilled, please either invite them or share their name so we can reach out to them."""
 WELCOME_HASH = hashlib.sha256(WELCOME.encode()).hexdigest()
 
 
@@ -184,8 +183,9 @@ def main():
 
     @app.event('message')
     def on_message(body):
-        with lock:
-            print('reply:', intake.reply(body), flush=True)
+        # Introductions belong in the public channel. Acknowledge subscribed
+        # direct-message events without saving replies or sending a response.
+        pass
 
     # Log only fixed failure statuses, never tokens, profiles, or message text.
     @app.error
